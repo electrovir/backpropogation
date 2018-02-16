@@ -49,21 +49,23 @@ const Backprop = (() => {
   // NOTE: THIS MUTATES THE lastOutputs VARIABLE
   function getAllNodeOutputs(lastOutputs, weights, inputs, bias, outputFunction = getOutput) {
     
+    function mapOutputLayer(layerIndex, node, nodeIndex) {
+        
+        let net;
+        
+        if (layerIndex === 0) {
+          net = getNet(weights, inputs, layerIndex, nodeIndex, bias);
+        }
+        else {
+          net = getNet(weights, lastOutputs[layerIndex - 1], layerIndex, nodeIndex, bias);
+        }
+        
+        return outputFunction(net);
+      }
+    
     for (let layerIndex = 0; layerIndex < lastOutputs.length; layerIndex++) {
       
-      lastOutputs[layerIndex] = lastOutputs[layerIndex].map((node, nodeIndex) => {
-          
-          let net;
-          
-          if (layerIndex === 0) {
-            net = getNet(weights, inputs, layerIndex, nodeIndex, bias);
-          }
-          else {
-            net = getNet(weights, lastOutputs[layerIndex - 1], layerIndex, nodeIndex, bias);
-          }
-          
-          return outputFunction(net);
-        });
+      lastOutputs[layerIndex] = lastOutputs[layerIndex].map(mapOutputLayer.bind(null, layerIndex));
     }
     
     // THIS MUTATES
@@ -74,19 +76,21 @@ const Backprop = (() => {
     
     let errorSignals = initNodeValues(outputs.reduce((sizes, layer) => sizes.concat(layer.length), []));
     
+    function mapErrorSignalLayer(layerIndex, node, nodeIndex) {
+      
+      const nodeOutput = outputs[layerIndex][nodeIndex];
+      
+      if (layerIndex === errorSignals.length - 1) {
+        return getOutputErrorSignal(nodeOutput, derivativeFunction(nodeOutput), targets[nodeIndex]);
+      }
+      else {
+        return getHiddenNodeErrorSignal(derivativeFunction(nodeOutput), weights, errorSignals, layerIndex, nodeIndex);
+      }
+    }
+    
     // go backwards from the end of the array (the output layer)
     for (let layerIndex = errorSignals.length - 1; layerIndex >= 0; layerIndex--) {
-      errorSignals[layerIndex] = errorSignals[layerIndex].map((node, nodeIndex) => {
-        
-        const nodeOutput = outputs[layerIndex][nodeIndex];
-        
-        if (layerIndex === errorSignals.length - 1) {
-          return getOutputErrorSignal(nodeOutput, derivativeFunction(nodeOutput), targets[nodeIndex]);
-        }
-        else {
-          return getHiddenNodeErrorSignal(derivativeFunction(nodeOutput), weights, errorSignals, layerIndex, nodeIndex);
-        }
-      });
+      errorSignals[layerIndex] = errorSignals[layerIndex].map(mapErrorSignalLayer.bind(null, layerIndex));
     }
     
     return errorSignals;
