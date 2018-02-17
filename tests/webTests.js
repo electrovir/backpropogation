@@ -47,7 +47,9 @@ const TEST_VALUES = {
   outputNodeErrorSignalArray: [
     [],
     [-0.0522]
-  ]
+  ],
+  learningRate: 0.1,
+  size: [2, 1]
 };
 
 function runWebTests() {
@@ -57,7 +59,11 @@ function runWebTests() {
     testNet(),
     testInitLayerOutputs(),
     testGetAllNodeOutputs(),
-    testAllErrorSignals()
+    testAllErrorSignals(),
+    testAllWeightDeltas(),
+    testNewWeights(),
+    testPattern(),
+    testBackprop()
   ];
   
   const passed = results.reduce( (total, current) => total && current.passed.reduce((a, b) => a && b, true), true);
@@ -65,9 +71,81 @@ function runWebTests() {
   console.log('all passed:', passed, 'results:', results);
 }
 
+function testBackprop() {
+  const trainZeroMomentum = Backprop.train(TEST_VALUES.learningRate, TEST_VALUES.testWeights, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, undefined, undefined, 0, 1, undefined, undefined, 1, 10);
+  const trainWithValidation = Backprop.train(TEST_VALUES.learningRate, TEST_VALUES.testWeights, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, [TEST_VALUES.inputs], [TEST_VALUES.targets], 0, 1, undefined, undefined, 1, 10);
+  
+  const results = [
+    {
+      data: trainZeroMomentum,
+      result: trainZeroMomentum.finalEpochIndex,
+      target: 1100,
+      condition: trainZeroMomentum.finalOutputs[1][0] - TEST_VALUES.targets[0] < 0.1
+    },
+    {
+      data: trainWithValidation,
+      result: trainWithValidation.finalEpochIndex,
+      target: 1100,
+      condition: trainWithValidation.finalOutputs[1][0] - TEST_VALUES.targets[0] < 0.1
+    }
+  ];
+  
+  return returnResult(results, 'fullBackprop');
+}
+
+function testNewWeights() {
+  
+  const outputs = Backprop._test_getAllNodeOutputs(TEST_VALUES.size, TEST_VALUES.testWeights, TEST_VALUES.inputs, 1);
+  const errorSignals = Backprop._test_getAllErrorSignals(outputs, TEST_VALUES.testWeights, TEST_VALUES.targets);
+  const weightDeltas = Backprop._test_getAllWeightDeltas(TEST_VALUES.learningRate, errorSignals, outputs, TEST_VALUES.inputs, TEST_VALUES.testWeights, [[[0,0],[0,0],[0,0]],[[0],[0],[0]]], 1, 0);
+  
+  const results = [
+    {
+      result: Backprop._test_getNewWeights(TEST_VALUES.testWeights, weightDeltas),
+      target: [[[1, 2], [0.9994471549545654, 1.3994035347424334], [1.0005771549545655, 0.4994035347424335]], [[0.9995769500471305], [0.9996348048116477], [1.000501994870844]]]
+    }
+  ];
+  
+  return returnResult(results, 'newWeights');
+  
+}
+
+function testPattern() {
+  const results = [
+    {
+      result: Backprop._test_runSinglePattern(TEST_VALUES.learningRate, TEST_VALUES.testWeights, TEST_VALUES.inputs, TEST_VALUES.targets, 1, TEST_VALUES.size, 0),
+      target: {
+        outputs: [[0.8809156696866742, 0.8698915256370021], [0.940694176634854]],
+        errorSignals: [[-0.005528450454346137, -0.00596465257566539], [-0.052480051291559186]],
+        weights: TEST_VALUES.testWeights,
+        weightDeltas: [[[0, 0], [-0.0005528450454346137, -0.0005964652575665391], [-0.0005528450454346137, -0.0005964652575665391]], [[-0.004623049952869488], [-0.004565195188352254], [-0.005248005129155919]]],
+        squaredError: 0.8849055339547259,
+        newWeights: [[[1, 2], [0.9994471549545654, 1.3994035347424334], [1.0005771549545655, 0.4994035347424335]], [[0.9995769500471305], [0.9996348048116477], [1.000501994870844]]]
+      }
+    }
+  ];
+  
+  return returnResult(results, 'singlePattern');
+}
+
+function testAllWeightDeltas() {
+  
+  const outputs = Backprop._test_getAllNodeOutputs(TEST_VALUES.size, TEST_VALUES.testWeights, TEST_VALUES.inputs, 1);
+  const errorSignals = Backprop._test_getAllErrorSignals(outputs, TEST_VALUES.testWeights, TEST_VALUES.targets);
+  
+  const results = [
+    {
+      result: Backprop._test_getAllWeightDeltas(TEST_VALUES.learningRate, errorSignals, outputs, TEST_VALUES.inputs, TEST_VALUES.testWeights, [[[0,0],[0,0],[0,0]],[[0],[0],[0]]], 1, 0),
+      target: [[[0, 0], [-0.0005528450454346137, -0.0005964652575665391], [-0.0005528450454346137, -0.0005964652575665391]], [[-0.004623049952869488], [-0.004565195188352254], [-0.005248005129155919]]]
+    }
+  ];
+  
+  return returnResult(results, 'allWeightDeltas');
+}
+
 function testAllErrorSignals() {
   
-  const outputs = Backprop._test_getAllNodeOutputs(Backprop._test_initLayerOutputs([2, 1]), TEST_VALUES.testWeights, TEST_VALUES.inputs, 1);
+  const outputs = Backprop._test_getAllNodeOutputs(TEST_VALUES.size, TEST_VALUES.testWeights, TEST_VALUES.inputs, 1);
   
   let results = [
     {
@@ -110,7 +188,15 @@ function testInitLayerOutputs() {
     {
       result: Backprop._test_initLayerOutputs([2, 1]),
       target: [[null, null],[null]]
-    }
+    },
+    {
+      result: Backprop._test_initLayerOutputs([2, 1], true),
+      target: [[null, null, null],[null]]
+    },
+    {
+      result: Backprop._test_initLayerOutputs([3, 3, 2], true),
+      target: [[null, null, null, null], [null, null, null, null], [null, null]]
+    },
   ];
     
   return returnResult(results, 'initLayers');
@@ -119,7 +205,7 @@ function testInitLayerOutputs() {
 function testGetAllNodeOutputs() {
   results = [
     {
-      result: Backprop._test_getAllNodeOutputs(Backprop._test_initLayerOutputs([2, 1]), TEST_VALUES.testWeights, TEST_VALUES.inputs, 1),
+      result: Backprop._test_getAllNodeOutputs(TEST_VALUES.size, TEST_VALUES.testWeights, TEST_VALUES.inputs, 1),
       target: [[0.8809156696866742, 0.8698915256370021], [0.940694176634854]]
     }
   ];
@@ -137,7 +223,7 @@ function returnResult(results, testName) {
 
 function compareResults(results) {
   return results.map((testObject) => {
-    return equal(testObject.result, testObject.target);
+    return equal(testObject.result, testObject.target)  && ((testObject.condition !== undefined && testObject.condition) || testObject.condition === undefined);
   });
 }
 
