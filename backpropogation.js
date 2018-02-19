@@ -1,5 +1,24 @@
 const Backprop = (() => {
   
+  function shuffleDoubleArray(array1, array2) {
+    let resultArray1 = [];
+    let resultArray2 = [];
+    
+    for (let i = 0; i < array1.length; i++) {
+      let randomIndex = Math.floor(Math.random() * array1.length);
+      
+      resultArray1.push(array1[randomIndex]);
+      resultArray2.push(array2[randomIndex]);
+      
+      array1.splice(randomIndex, 1);
+      array2.splice(randomIndex, 1);
+    }
+    resultArray1 = resultArray1.concat(array1);
+    resultArray2 = resultArray2.concat(array2);
+    
+    return [resultArray1, resultArray2];
+	}
+  
   // this should not mutate its inputs
   // this automatically appends the bias to the output matrix
   function getNet(weights, lowerLayerOutputs, layerIndex, nodeIndex, bias) {
@@ -153,7 +172,11 @@ const Backprop = (() => {
     };
   }
   
-  function train(learningRate, initialWeights, inputs, targets, nodeCounts, validationInputs, validationTargets, momentum = 0, bias = 1, outputFunction = getOutput, outputDerivativeFunction = getOutputDerivative, declinePercent = 1, maxDeclineCount = 10) {
+  function train(learningRate, inputs, targets, nodeCounts, initialWeights = null, validationInputs = null, validationTargets = null, momentum = 0, bias = 1, outputFunction = getOutput, outputDerivativeFunction = getOutputDerivative, declinePercent = 1, maxDeclineCount = 10, maxIterations = 9999, shuffle = true) {
+    
+    if (!Array.isArray(initialWeights) || initialWeights.length === 0) {
+      initialWeights = randomWeights(nodeCounts, inputs.length);
+    }
     
     let trainResults = {
       finalEpochIndex: 0,
@@ -175,7 +198,7 @@ const Backprop = (() => {
     let iteration = 0;
     let continueTraining = true;
     
-    while (continueTraining && iteration < 9999) {
+    while (continueTraining && iteration < maxIterations) {
       sumSquaredError = 0;
       
       const allPatternResults = inputs.reduce((results, pattern, patternIndex) => {        
@@ -188,6 +211,10 @@ const Backprop = (() => {
         return results.concat(patternResults);
       }, []);
       
+      if (shuffle) {
+        [inputs, targets] = shuffleDoubleArray(inputs, targets);
+      }
+      
       let epochResult = {
         patternResults: allPatternResults,
         trainMeanSumSquaredError: sumSquaredError / inputs.length,
@@ -195,20 +222,20 @@ const Backprop = (() => {
         outputs: allPatternResults[allPatternResults.length - 1].outputs
       };
       
-      let errorChange = epochResult.trainMeanSumSquaredError - errors[0].msse;
+      let errorTarget = epochResult.trainMeanSumSquaredError;
       
       if (validationInputs && validationTargets) {
         const validationOutput = run(nodeCounts, epochResult.weights, validationInputs, validationTargets, bias, outputFunction);
         
-        errorChange = validationOutput.meanSquaredError - errors[0].msse;
+        errorTarget = validationOutput.meanSquaredError;
         epochResult.validateMeanSumSquaredError = validationOutput.meanSquaredError;
       }
       
-      const errorBetter = errorChange <= -errors[0].msse * declinePercent / 100;
+      const errorBetter = errorTarget - errors[0].msse <= -errors[0].msse * declinePercent / 100;
       
       if (errorBetter) {
         errors = [{
-          msse: epochResult.trainMeanSumSquaredError,
+          msse: errorTarget,
           epochIndex: iteration,
           countSinceLastImprovement: iteration - errors[0].countSinceLastImprovement
         }];
@@ -216,7 +243,7 @@ const Backprop = (() => {
       else {
         // error got worse
         errors.push({
-          msse: epochResult.trainMeanSumSquaredError,
+          msse: errorTarget,
           epochIndex: iteration
         });
       }
@@ -254,6 +281,19 @@ const Backprop = (() => {
     };
   }
   
+  function randomWeights(nodeCounts, featureCount) {
+    
+    function getRandomWeight() {
+      return Math.random() - 0.5;
+    }
+    
+    return [featureCount].concat(nodeCounts).slice(0, nodeCounts.length).map((layerNodeCount, layerIndex) => {
+      return Array(layerNodeCount + 1).fill(null).map(() => {
+        return Array(nodeCounts[layerIndex]).fill(null).map(() => getRandomWeight());
+      });
+    });
+  }
+  
   return {
     _test_getNet: getNet,
     _test_getHiddenNodeErrorSignal: getHiddenNodeErrorSignal,
@@ -264,6 +304,7 @@ const Backprop = (() => {
     _test_getNewWeights: getNewWeights,
     _test_runSinglePattern: runSinglePattern,
     
+    generateRandomWeights: randomWeights,
     train: train,
     run: run
   };
@@ -272,5 +313,5 @@ const Backprop = (() => {
 
 // set module exports if in node
 if (typeof module !== 'undefined' && typeof module === 'object') {
-  Object.assign(module.exports, Perceptron);
+  Object.assign(module.exports, Backprop);
 }

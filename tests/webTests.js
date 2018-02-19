@@ -63,7 +63,8 @@ function runWebTests() {
     testAllWeightDeltas(),
     testNewWeights(),
     testPattern(),
-    testBackprop()
+    testBackprop(),
+    testRandomWeights()
   ];
   
   const passed = results.reduce( (total, current) => total && current.passed.reduce((a, b) => a && b, true), true);
@@ -71,9 +72,44 @@ function runWebTests() {
   console.log('all passed:', passed, 'results:', results);
 }
 
+function testRandomWeights() {
+  
+  const weights = Backprop.generateRandomWeights(TEST_VALUES.size, TEST_VALUES.inputs.length);
+  
+  const results = [
+    {
+      data: weights,
+      result: weights.length,
+      target: 2
+    },
+    {
+      data: weights[0],
+      result: weights[0].length,
+      target: 3
+    },
+    {
+      data: weights[1],
+      result: weights[1].length,
+      target: 3
+    },
+    {
+      data: weights[0][1],
+      result: weights[0][1].length,
+      target: 2
+    },
+    {
+      data: weights[1][0],
+      result: weights[1][0].length,
+      target: 1
+    }
+  ];
+  
+  return returnResult(results, 'randomWeights');
+}
+
 function testBackprop() {
-  const trainZeroMomentum = Backprop.train(TEST_VALUES.learningRate, TEST_VALUES.testWeights, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, undefined, undefined, 0, 1, undefined, undefined, 1, 10);
-  const trainWithValidation = Backprop.train(TEST_VALUES.learningRate, TEST_VALUES.testWeights, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, [TEST_VALUES.inputs], [TEST_VALUES.targets], 0, 1, undefined, undefined, 1, 10);
+  const trainZeroMomentum = Backprop.train(TEST_VALUES.learningRate, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, TEST_VALUES.testWeights, undefined, undefined, 0, 1, undefined, undefined, 1, 10, 9999, false);
+  const trainWithValidation = Backprop.train(TEST_VALUES.learningRate, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, TEST_VALUES.testWeights, [TEST_VALUES.inputs], [TEST_VALUES.targets], 0, 1, undefined, undefined, 1, 10, 9999, false);
   
   const results = [
     {
