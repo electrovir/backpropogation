@@ -4,7 +4,7 @@
 //    output layer with a single output node
 const TEST_VALUES = {
   targets: [
-    0
+      0
   ],
   testWeights: [
     // between inputs layer and hidden layer
@@ -36,6 +36,22 @@ const TEST_VALUES = {
     0,
     1
   ],
+  multiPatterns: [
+    [
+      0, 1
+    ],
+    [
+      1, 1
+    ]
+  ],
+  multiTargets: [
+    [
+      2, 3
+    ]
+  ],
+  multiSize: [
+    3, 1
+  ],
   testNodeOutputs: [
     [
       null, null
@@ -55,16 +71,18 @@ const TEST_VALUES = {
 function runWebTests() {
   
   const results = [ 
-    testHiddenNodeErrorSignal(), 
-    testNet(),
-    testInitLayerOutputs(),
-    testGetAllNodeOutputs(),
-    testAllErrorSignals(),
-    testAllWeightDeltas(),
-    testNewWeights(),
-    testPattern(),
-    testBackprop(),
-    testRandomWeights()
+    // testHiddenNodeErrorSignal(), 
+    // testNet(),
+    // testInitLayerOutputs(),
+    // testGetAllNodeOutputs(),
+    // testAllErrorSignals(),
+    // testAllWeightDeltas(),
+    // testNewWeights(),
+    // testPattern(),
+    // testBackprop(),
+    testRandomWeights(),
+    // testSquaredError(),
+    // testShuffle()
   ];
   
   const passed = results.reduce( (total, current) => total && current.passed.reduce((a, b) => a && b, true), true);
@@ -72,9 +90,30 @@ function runWebTests() {
   console.log('all passed:', passed, 'results:', results);
 }
 
+function testShuffle() {
+  
+  const shuffle = Backprop._test_shuffleArrays(['a', 'b', 'c', 'd'], [['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd']]);
+  
+  const results = [
+    {
+      data: shuffle,
+      result: shuffle.length,
+      target: 2,
+      condition: shuffle[0].reduce((accum, letter, letterIndex) => {
+        return accum && shuffle[1].reduce((innerAccum, innerLetter) => {
+          return innerAccum && innerLetter[letterIndex] === letter;
+        }, true);
+      }, true)
+    }
+  ];
+  
+  return returnResult(results, 'shuffle');
+}
+
 function testRandomWeights() {
   
   const weights = Backprop.generateRandomWeights(TEST_VALUES.size, TEST_VALUES.inputs.length);
+  const complexWeights = Backprop.generateRandomWeights([8, 1], 4);
   
   const results = [
     {
@@ -101,15 +140,37 @@ function testRandomWeights() {
       data: weights[1][0],
       result: weights[1][0].length,
       target: 1
+    },
+    {
+      data: complexWeights,
+      result: complexWeights[0][1].length,
+      target: 8
+    },
+    {
+      data: complexWeights[0],
+      result: complexWeights[0].length,
+      target: 5
     }
   ];
   
   return returnResult(results, 'randomWeights');
 }
 
+function testSquaredError() {
+  const results = [
+    {
+      result: Backprop._test_getSquaredError([4, 5, 5], [1, 2, 3]),
+      target: 22
+    }
+  ];
+  
+  return returnResult(results, 'squaredError');
+}
+
 function testBackprop() {
   const trainZeroMomentum = Backprop.train(TEST_VALUES.learningRate, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, TEST_VALUES.testWeights, undefined, undefined, 0, 1, undefined, undefined, 1, 10, 9999, false);
   const trainWithValidation = Backprop.train(TEST_VALUES.learningRate, [TEST_VALUES.inputs], [TEST_VALUES.targets], TEST_VALUES.size, TEST_VALUES.testWeights, [TEST_VALUES.inputs], [TEST_VALUES.targets], 0, 1, undefined, undefined, 1, 10, 9999, false);
+  const trainWithMultiplePatterns = Backprop.train(TEST_VALUES.learningRate, TEST_VALUES.multiPatterns, TEST_VALUES.multiTargets, TEST_VALUES.multiSize);
   
   const results = [
     {
@@ -123,6 +184,12 @@ function testBackprop() {
       result: trainWithValidation.finalEpochIndex,
       target: 1100,
       condition: trainWithValidation.finalOutputs[1][0] - TEST_VALUES.targets[0] < 0.1
+    },
+    {
+      data: trainWithMultiplePatterns,
+      result: true,
+      target: true,
+      condition: trainWithMultiplePatterns.finalEpochIndex > 1
     }
   ];
   

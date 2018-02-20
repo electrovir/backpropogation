@@ -1,22 +1,25 @@
 const Backprop = (() => {
   
-  function shuffleDoubleArray(array1, array2) {
+  // const FS = require('fs');
+  
+  function shuffleArrays(array1, arrays) {
     let resultArray1 = [];
-    let resultArray2 = [];
+    let resultArrays = Array(arrays.length).fill([]);
     
     for (let i = 0; i < array1.length; i++) {
       let randomIndex = Math.floor(Math.random() * array1.length);
       
       resultArray1.push(array1[randomIndex]);
-      resultArray2.push(array2[randomIndex]);
+      // resultArrays.forEach((result, resultIndex) => result.push(arrays[resultIndex][randomIndex]));
+      resultArrays = resultArrays.map((innerArray, innerIndex) => innerArray.concat(arrays[innerIndex][randomIndex]));
       
       array1.splice(randomIndex, 1);
-      array2.splice(randomIndex, 1);
+      arrays.forEach((innerArray) => innerArray.splice(randomIndex, 1));
     }
     resultArray1 = resultArray1.concat(array1);
-    resultArray2 = resultArray2.concat(array2);
+    resultArrays = resultArrays.map((innerArray, innerIndex) => innerArray.concat(arrays[innerIndex]));
     
-    return [resultArray1, resultArray2];
+    return [resultArray1, resultArrays];
 	}
   
   // this should not mutate its inputs
@@ -102,8 +105,7 @@ const Backprop = (() => {
     }
     
     let errorSignals = initNodeValues(outputs.reduce((sizes, layer) => sizes.concat(layer.length), []));
-    // let errorSignals = initNodeValues(nodeCounts, false);
-    
+
     // go backwards from the end of the array (the output layer)
     for (let layerIndex = errorSignals.length - 1; layerIndex >= 0; layerIndex--) {
       errorSignals[layerIndex] = errorSignals[layerIndex].map(mapErrorSignalLayer.bind(null, layerIndex));
@@ -146,11 +148,27 @@ const Backprop = (() => {
   
   function getSquaredError(outputs, targets) {
     return outputs.reduce((sum, output, outputIndex) => {
-      return sum + Math.pow(output - outputIndex, 2);
+      return sum + Math.pow(output - targets[outputIndex], 2);
     }, 0);
   }
   
-  function runSinglePattern(learningRate, weights, inputs, targets, bias, nodeCounts, momentum, lastWeightDeltas, outputFunction, derivativeFunction) {
+  function getClassificationAccuracy(outputs, targets) {
+    const max = outputs.reduce((final, current, maxIndex) => {
+      if (current > final.max) {
+        return {
+          max: current,
+          index: maxIndex
+        };
+      }
+      else {
+        return final;
+      }
+    }, {max: -Infinity, index: -1});
+    
+    return targets[max.index] == 1;
+  }
+  
+  function runSinglePattern(learningRate, weights, inputs, targets, bias, nodeCounts, momentum, lastWeightDeltas, outputFunction, derivativeFunction, classificationFunction) {
     
     const outputs = getAllNodeOutputs(nodeCounts, weights, inputs, bias, outputFunction);
     
@@ -162,20 +180,24 @@ const Backprop = (() => {
     
     const error = getSquaredError(outputs[outputs.length - 1], targets);
     
+    const classifiedCorrectly = classificationFunction(outputs[outputs.length - 1], targets);
+    
     return {
       outputs: outputs,
       errorSignals: errorSignals,
       weights: JSON.parse(JSON.stringify(weights)),
       weightDeltas: weightDeltas,
       newWeights: newWeights,
-      squaredError: error
+      squaredError: error,
+      targets: targets,
+      classifiedCorrectly: classifiedCorrectly
     };
   }
   
-  function train(learningRate, inputs, targets, nodeCounts, initialWeights = null, validationInputs = null, validationTargets = null, momentum = 0, bias = 1, outputFunction = getOutput, outputDerivativeFunction = getOutputDerivative, declinePercent = 1, maxDeclineCount = 10, maxIterations = 9999, shuffle = true) {
+  function train(learningRate, inputs, targets, nodeCounts, initialWeights = null, validationInputs = null, validationTargets = null, momentum = 0, bias = 1, outputFunction = getOutput, outputDerivativeFunction = getOutputDerivative, declinePercent = 1, maxDeclineCount = 10, maxIterations = 9999, shuffle = true, classificationAccuracyFunction = getClassificationAccuracy) {
     
     if (!Array.isArray(initialWeights) || initialWeights.length === 0) {
-      initialWeights = randomWeights(nodeCounts, inputs.length);
+      initialWeights = randomWeights(nodeCounts, inputs[0].length);
     }
     
     let trainResults = {
@@ -185,8 +207,7 @@ const Backprop = (() => {
       initWeights: initialWeights,
       targets: targets,
       finalWeights: null,
-      finalError: 0,
-      finalOutputs: null
+      finalError: 0
     };
     let errors = [{
       msse: Infinity,
@@ -199,36 +220,56 @@ const Backprop = (() => {
     let continueTraining = true;
     
     while (continueTraining && iteration < maxIterations) {
-      sumSquaredError = 0;
+      let sumSquaredError = 0;
+      let correctCount = 0;
+      let lastWeights;
       
-      const allPatternResults = inputs.reduce((results, pattern, patternIndex) => {        
-        let patternResults = runSinglePattern(learningRate, weights, pattern, targets[patternIndex], bias, nodeCounts, momentum, deltas, outputFunction, outputDerivativeFunction);
+      const allPatternResults = inputs.reduce((results, pattern, patternIndex) => {       
+        const patternTargets = targets.map((nodeTargets) => nodeTargets[patternIndex]);
+        let patternResults = runSinglePattern(learningRate, weights, pattern, patternTargets, bias, nodeCounts, momentum, deltas, outputFunction, outputDerivativeFunction, classificationAccuracyFunction);
+        
+        
+        // console.log(JSON.stringify(patternResults));
+        // throw new Error('lerp');
         
         weights = patternResults.newWeights;
         sumSquaredError += patternResults.squaredError;
         deltas = patternResults.weightDeltas;
+        lastWeights = patternResults.weights;
+        correctCount += patternResults.classifiedCorrectly;
         
-        return results.concat(patternResults);
+        return results.concat({
+          outputs: patternResults.outputs[patternResults.outputs.length - 1],
+          targets: patternResults.targets
+        });
       }, []);
       
       if (shuffle) {
-        [inputs, targets] = shuffleDoubleArray(inputs, targets);
+        [inputs, targets] = shuffleArrays(inputs, targets);
       }
       
       let epochResult = {
         patternResults: allPatternResults,
         trainMeanSumSquaredError: sumSquaredError / inputs.length,
-        weights: allPatternResults[allPatternResults.length - 1].weights,
-        outputs: allPatternResults[allPatternResults.length - 1].outputs
+        outputs: allPatternResults[allPatternResults.length - 1].outputs,
+        index: iteration,
+        trainAccuracy: correctCount / inputs.length,
+        validateMeanSumSquaredError: null,
+        validateOutput: null,
+        validateTargets: null,
+        validateAccuracy: null
       };
       
       let errorTarget = epochResult.trainMeanSumSquaredError;
       
       if (validationInputs && validationTargets) {
-        const validationOutput = run(nodeCounts, epochResult.weights, validationInputs, validationTargets, bias, outputFunction);
+        const validationOutput = run(nodeCounts, lastWeights, validationInputs, validationTargets, bias, outputFunction);
         
         errorTarget = validationOutput.meanSquaredError;
         epochResult.validateMeanSumSquaredError = validationOutput.meanSquaredError;
+        epochResult.validateOutput = validationOutput.patternOutputs;
+        epochResult.validateTargets = validationOutput.patternTargets;
+        epochResult.validateAccuracy = validationOutput.accuracy;
       }
       
       const errorBetter = errorTarget - errors[0].msse <= -errors[0].msse * declinePercent / 100;
@@ -237,7 +278,8 @@ const Backprop = (() => {
         errors = [{
           msse: errorTarget,
           epochIndex: iteration,
-          countSinceLastImprovement: iteration - errors[0].countSinceLastImprovement
+          countSinceLastImprovement: iteration - errors[0].countSinceLastImprovement,
+          weights: lastWeights
         }];
       }
       else {
@@ -253,31 +295,50 @@ const Backprop = (() => {
       }
       
       trainResults.epochResults.push(epochResult);
+      
       iteration++;
+      // console.log(JSON.stringify(epochResult));
+      // throw new Error('derp');
     }
+    
+    // console.log(JSON.stringify(errors));
     
     trainResults.finalEpochIndex = errors[0].epochIndex;
     trainResults.finalError = errors[0].msse;
-    trainResults.finalWeights = trainResults.epochResults[trainResults.finalEpochIndex].weights;
-    trainResults.finalOutputs = trainResults.epochResults[trainResults.finalEpochIndex].outputs;
+    trainResults.finalWeights = errors[0].weights;
+    
+    // console.log(trainResults.epochResults[trainResults.finalEpochIndex].validateOutput);
+    // console.log(trainResults.epochResults[trainResults.finalEpochIndex].validateTargets);
+    // throw new Error('derp');
     
     return trainResults;
   }
   
-  function run(nodeCounts, weights, inputs, targets, bias = 1, outputFunction = getOutput) {
+  function run(nodeCounts, weights, inputs, targets, bias = 1, outputFunction = getOutput, classificationAccuracyFunction = getClassificationAccuracy) {
     
     let sumSquaredError = 0;
+    let accuracyCount = 0;
+    let allPatternTargets = [];
     
-    const allPatternOutputs = inputs.reduce((results, pattern) => {        
-      let patternOutputs = getAllNodeOutputs(nodeCounts, weights, pattern, bias, outputFunction);    
-      sumSquaredError += getSquaredError(patternOutputs[patternOutputs.length - 1], targets);
+    const allPatternOutputs = inputs.reduce((results, pattern, patternIndex) => {
+      let patternOutputs = getAllNodeOutputs(nodeCounts, weights, pattern, bias, outputFunction);
       
-      return results.concat(patternOutputs);
+      let patternTargets = targets.map((targets) => targets[patternIndex]);
+      
+      let outputNodeOutputs = patternOutputs[patternOutputs.length - 1];
+      
+      sumSquaredError += getSquaredError(outputNodeOutputs, patternTargets);
+      accuracyCount += getClassificationAccuracy(outputNodeOutputs, patternTargets);
+      
+      allPatternTargets.push(patternTargets);
+      return results.concat([outputNodeOutputs]);
     }, []);
     
     return {
       patternOutputs: allPatternOutputs,
-      meanSquaredError: sumSquaredError / inputs.length
+      patternTargets: allPatternTargets,
+      meanSquaredError: sumSquaredError / inputs.length,
+      accuracy: accuracyCount / inputs.length
     };
   }
   
@@ -303,6 +364,8 @@ const Backprop = (() => {
     _test_getAllWeightDeltas: getAllWeightDeltas,
     _test_getNewWeights: getNewWeights,
     _test_runSinglePattern: runSinglePattern,
+    _test_getSquaredError: getSquaredError,
+    _test_shuffleArrays: shuffleArrays,
     
     generateRandomWeights: randomWeights,
     train: train,
