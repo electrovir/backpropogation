@@ -17,6 +17,6 @@
   },
   "homepage": "https://github.com/electrovir/backpropogation#readme",
   "dependencies": {
-    "arff-toolkit": "0.0.6"
+    "arff-toolkit": "0.0.7"
   }
 }
