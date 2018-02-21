@@ -7,6 +7,7 @@ function arffTrainValidateTest(inputFileName, trainSplit, validationSplit, layer
     targetAttributes = ARFF.separateMultiClassArffData(data, targetAttributes);
     layerSizes[layerSizes.length - 1] = targetAttributes.length;
     
+    
     const arffSplits = ARFF.splitArffTrainValidateTest(data, trainSplit, validationSplit);
     const arffInputs = {
       train: ARFF.arffToInputs(arffSplits.trainArffData, targetAttributes, patternAttributes, options),

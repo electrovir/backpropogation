@@ -1,7 +1,5 @@
 const Backprop = (() => {
   
-  // const FS = require('fs');
-  
   function shuffleArrays(array1, arrays) {
     let resultArray1 = [];
     let resultArrays = Array(arrays.length).fill([]);
@@ -10,7 +8,6 @@ const Backprop = (() => {
       let randomIndex = Math.floor(Math.random() * array1.length);
       
       resultArray1.push(array1[randomIndex]);
-      // resultArrays.forEach((result, resultIndex) => result.push(arrays[resultIndex][randomIndex]));
       resultArrays = resultArrays.map((innerArray, innerIndex) => innerArray.concat(arrays[innerIndex][randomIndex]));
       
       array1.splice(randomIndex, 1);
@@ -194,8 +191,7 @@ const Backprop = (() => {
     };
   }
   
-  function train(learningRate, inputs, targets, nodeCounts, initialWeights = null, validationInputs = null, validationTargets = null, momentum = 0, bias = 1, outputFunction = getOutput, outputDerivativeFunction = getOutputDerivative, declinePercent = 1, maxDeclineCount = 10, maxIterations = 9999, shuffle = true, classificationAccuracyFunction = getClassificationAccuracy) {
-    
+  function train(learningRate, inputs, targets, nodeCounts, initialWeights = null, validationInputs = null, validationTargets = null, momentum = 0, bias = 1, outputFunction = getOutput, outputDerivativeFunction = getOutputDerivative, declinePercent = 1, maxDeclineCount = 10, maxIterations = 9999, shuffle = true, classificationAccuracyFunction = getClassificationAccuracy) {    
     if (!Array.isArray(initialWeights) || initialWeights.length === 0) {
       initialWeights = randomWeights(nodeCounts, inputs[0].length);
     }
@@ -227,10 +223,6 @@ const Backprop = (() => {
       const allPatternResults = inputs.reduce((results, pattern, patternIndex) => {       
         const patternTargets = targets.map((nodeTargets) => nodeTargets[patternIndex]);
         let patternResults = runSinglePattern(learningRate, weights, pattern, patternTargets, bias, nodeCounts, momentum, deltas, outputFunction, outputDerivativeFunction, classificationAccuracyFunction);
-        
-        
-        // console.log(JSON.stringify(patternResults));
-        // throw new Error('lerp');
         
         weights = patternResults.newWeights;
         sumSquaredError += patternResults.squaredError;
@@ -297,19 +289,12 @@ const Backprop = (() => {
       trainResults.epochResults.push(epochResult);
       
       iteration++;
-      // console.log(JSON.stringify(epochResult));
-      // throw new Error('derp');
     }
-    
-    // console.log(JSON.stringify(errors));
     
     trainResults.finalEpochIndex = errors[0].epochIndex;
     trainResults.finalError = errors[0].msse;
+    trainResults.finalTrainError = trainResults.epochResults[errors[0].epochIndex].trainMeanSumSquaredError;
     trainResults.finalWeights = errors[0].weights;
-    
-    // console.log(trainResults.epochResults[trainResults.finalEpochIndex].validateOutput);
-    // console.log(trainResults.epochResults[trainResults.finalEpochIndex].validateTargets);
-    // throw new Error('derp');
     
     return trainResults;
   }
